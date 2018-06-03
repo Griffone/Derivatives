@@ -163,7 +163,7 @@ defmodule Parser do
     """
     @spec parse_operation(String.t()) :: {atom, String.t()} | :error
     @spec parse_operation(String.t(), list({atom, String.t()})) :: {atom, String.t()} | :error
-    def parse_operation(string), do: parse_operation(string, @map_ops)
+    def parse_operation(string), do: parse_operation(string, @ops_list)
     def parse_operation(string, [{op, opName} | restOps]) do
         if String.starts_with?(string, opName) do
             {op, String.slice(string, String.length(opName)..-1)}
