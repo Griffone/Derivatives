@@ -13,10 +13,11 @@ defmodule Derivative do
     @doc """
     Find a derivative of given expression.
     """
-    @spec derivative(expression, variableId) :: expression
-    @spec derivative(variableId, expression) :: expression
-    def derivative(expression, var) when is_tuple(expression), do: Expression.evaluate(deriv(var, Expression.evaluate(expression)))
-    def derivative(var, expression) when is_tuple(expression), do: deriv(var, Expression.evaluate(expression))
+    @spec derive(expression, variableId) :: expression
+    @spec derive(variableId, expression) :: expression
+    def derive(expression, var) when is_tuple(expression), do: Expression.evaluate(deriv(var, Expression.evaluate(expression)))
+    def derive(var, expression) when is_tuple(expression), do: deriv(var, Expression.evaluate(expression))
+
     @spec deriv(variableId, expression) :: expression
     defp deriv(x, {:num, _}), do: {:num, 0}
     defp deriv(x, {:var, x}), do: {:num, 1}
@@ -54,39 +55,68 @@ defmodule Expression do
 
     @doc """
     Attempt to evaluate an expression.
-    Will perform any available functions.
+    Will perform any available functions on numbers or simplify some of the more basic simplification rules.
     """
     @spec evaluate(expression) :: expression | :illegal_expression
-    def evaluate({:sum, a, {:num, b}}) when b < 0, do: {:sub, a, {:num, -b}}
-    def evaluate({:sum, {:num, a}, {:num, b}}), do: {:num, a + b}
-    def evaluate({:sum, a, {:num, 0}}), do: a
-    def evaluate({:sum, {:num, 0}, b}), do: b
-    def evaluate({:sub, {:num, a}, {:num, b}}), do: {:num, a - b}
-    def evaluate({:sub, a, {:num, 0}}), do: a
-    def evaluate({:mul, {:num, a}, {:num, b}}), do: {:num, a * b}
-    def evaluate({:mul, _, {:num, 0}}), do: {:num, 0}
-    def evaluate({:mul, {:num, 0}, _}), do: {:num, 0}
-    def evaluate({:mul, a, {:num, 1}}), do: a
-    def evaluate({:mul, {:num, 1}, b}), do: b
-    def evaluate({:mul, {:var, v}, {:var, v}}), do: {:pow, {:var, v}, {:num, 2}}
-    def evaluate({:div, {:num, a}, {:num, b}}), do: {:num, a / b}
-    def evaluate({:div, _, {:num, 0}}), do: :illegal_expression
-    def evaluate({:div, {:num, 0}, _}), do: {:num, 0}
-    def evaluate({:div, a, {:num, 1}}), do: a
-    def evaluate({:pow, a, {:num, 1}}), do: a
-    def evaluate({:pow, {:num, 0}, {:num, 0}}), do: :illegal_expression
-    def evaluate({:pow, {:num, 0}, a}), do: {:num, 0}
-    def evaluate({:pow, a, {:num, 0}}), do: {:num, 1}
     def evaluate({op, a, b}) do
-        ea = evaluate(a)
-        eb = evaluate(b)
-        if ea != a or eb != b do
-            evaluate({op, ea, eb})
+        expr = eval({op, a, b})
+        if expr != {op, a, b} do
+            evaluate(expr)
         else
-            {op, ea, eb}
+            expr
         end
     end
-    def evaluate(expression), do: expression
+    def evaluate(expr), do: expr
+
+    @spec eval(expression) :: expression | :illegal_expression
+    # Addition
+    defp eval({:sum, e, {:num, b}}) when b < 0, do: {:sub, e, {:num, -b}}
+    defp eval({:sum, {:num, a}, {:num, b}}), do: {:num, a + b}
+    defp eval({:sum, e, {:num, 0}}), do: e
+    defp eval({:sum, {:num, 0}, e}), do: e
+    defp eval({:sum, {:var, v}, {:var, v}}), do: {:mul, {:num, 2}, {:var, v}}
+    defp eval({:sum, {:num, a}, {:sum, e, {:num, b}}}), do: {:sum, {:num, a + b}, e}
+    defp eval({:sum, {:num, a}, {:sum, {:num, b}, e}}), do: {:sum, {:num, a + b}, e}
+    defp eval({:sum, {:sum, e, {:num, a}}, {:num, b}}), do: {:sum, {:num, a + b}, e}
+    defp eval({:sum, {:sum, {:num, a}, e}, {:num, b}}), do: {:sum, {:num, a + b}, e}
+    # Subtraction
+    defp eval({:sub, {:num, a}, {:num, b}}), do: {:num, a - b}
+    defp eval({:sub, e, {:num, 0}}), do: e
+    defp eval({:sub, e, e}), do: {:num, 0}
+    # Multiplication
+    defp eval({:mul, {:num, a}, {:num, b}}), do: {:num, a * b}
+    defp eval({:mul, _, {:num, 0}}), do: {:num, 0}
+    defp eval({:mul, {:num, 0}, _}), do: {:num, 0}
+    defp eval({:mul, e, {:num, 1}}), do: e
+    defp eval({:mul, {:num, 1}, e}), do: e
+    defp eval({:mul, {:var, v}, {:var, v}}), do: {:pow, {:var, v}, {:num, 2}}
+    defp eval({:mul, {:var, v}, {:pow, {:var, v}, {:num, n}}}), do: {:pow, {:var, v}, {:num, n + 1}}
+    defp eval({:mul, {:pow, {:var, v}, {:num, n}}, {:var, v}}), do: {:pow, {:var, v}, {:num, n + 1}}
+    defp eval({:mul, {:num, a}, {:mul, e, {:num, b}}}), do: {:mul, e, {:num, a * b}}
+    defp eval({:mul, {:num, a}, {:mul, {:num, b}, e}}), do: {:mul, e, {:num, a * b}}
+    defp eval({:mul, {:mul, e, {:num, a}}, {:num, b}}), do: {:mul, e, {:num, a * b}}
+    defp eval({:mul, {:mul, {:num, a}, e}, {:num, b}}), do: {:mul, e, {:num, a * b}}
+    # Division
+    defp eval({:div, {:num, a}, {:num, b}}), do: {:num, a / b}
+    defp eval({:div, _, {:num, 0}}), do: :illegal_expression
+    defp eval({:div, {:num, 0}, _}), do: {:num, 0}
+    defp eval({:div, e, {:num, 1}}), do: e
+    # Power
+    defp eval({:pow, {:num, a}, {:num, b}}), do: :math.pow(a, b)
+    defp eval({:pow, e, {:num, 1}}), do: e
+    defp eval({:pow, {:num, 0}, {:num, 0}}), do: :illegal_expression
+    defp eval({:pow, {:num, 0}, _}), do: {:num, 0}
+    defp eval({:pow, _, {:num, 0}}), do: {:num, 1}
+    defp eval({op, a, b}) do
+        ea = eval(a)
+        eb = eval(b)
+        if ea != a or eb != b do
+            eval({op, ea, eb})
+        else
+            {op, a, b}
+        end
+    end
+    defp eval(expression), do: expression
 
     def toString(expression), do: expr_to_str(expression)
 
@@ -112,7 +142,8 @@ defmodule Parser do
     String parser module.
 
     Used to parse expressions, used by Derivative module.
-    Returns resulting expression.
+
+    Known limitation: doesn't use proper parsing technique, so requires strict mathematical notation (2x is illegal for example)
     """
     @strings_ops    ["+", "-", "*", "/", "^"]
     # An operator is {operator, symbol, priority}
@@ -226,7 +257,7 @@ defmodule Parser do
 
     @doc """
     A help parse function.
-    Parses a function operator. More for future proofing, once we get stuff like log and stuff.
+    Parses a function operator. More for future proofing, once we get stuff like log.
     """
     @spec parse_operation(String.t()) :: {atom, String.t()} | :error
     @spec parse_operation(String.t(), list({atom, String.t(), number})) :: {{atom, number}, String.t()} | :error
@@ -239,4 +270,39 @@ defmodule Parser do
         end
     end
     defp parse_operation(string, []), do: :error
+end
+
+defmodule Test do
+    @moduledoc """
+    Helper functions to test the whole calculator process.
+
+    Includes simple single-element tests and whole pipeline tests and example functional data.
+    """
+
+    @spec sample_input() :: String.t()
+    def sample_input(), do: "2 *x * 12 + 4 * 2 * 5 / 5 + 11 * x * x * x * x"
+    @spec sample_expression() :: Expression.t()
+    def sample_expression(), do: {:pow, {:var, "x"}, {:sum, {:num, 12}, {:mul, {:var, "x"}, {:num, 8.2}}}}
+    @spec sample_evaluation() :: Expression.t()
+    def sample_evaluation(), do: {:sum, {:num, 2}, {:num, 2}}
+
+    @spec test_parse() :: Expression.expression
+    def test_parse() do
+        sample = sample_input()
+        IO.puts("Parsing \"#{sample}\"")
+        result = Parser.parse(sample_input())
+        IO.puts("Parsed result: \"#{Expression.toString(result)}\"")
+        result
+    end
+    @spec test_pipeline() :: Expression.expression
+    def test_pipeline() do
+        sample = test_parse()
+        result = Expression.evaluate(sample)
+        IO.puts("Simplified: \"#{Expression.toString(result)}\"")
+        result = Derivative.derive(result, "x")
+        IO.puts("Derivative result: \"#{Expression.toString(result)}\"")
+        result
+    end
+
+
 end
