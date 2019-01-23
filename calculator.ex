@@ -21,13 +21,14 @@ defmodule Derivative do
     @spec deriv(variableId, expression) :: expression
     defp deriv(x, {:num, _}), do: {:num, 0}
     defp deriv(x, {:var, x}), do: {:num, 1}
-    defp deriv(x, {:var, y}), do: {:var, y}
+    defp deriv(x, {:var, y}), do: {:var, 0}
     defp deriv(x, {:sum, a, b}), do: {:sum, deriv(x, a), deriv(x, b)}
     defp deriv(x, {:sub, a, b}), do: {:sub, deriv(x, a), deriv(x, b)}
     defp deriv(x, {:mul, {:var, x}, b}), do: b
     defp deriv(x, {:mul, a, {:var, x}}), do: a
     defp deriv(x, {:mul, a, b}), do: {:sum, {:mul, deriv(x, a), b}, {:mul, a, deriv(x, b)}}
     defp deriv(x, {:pow, {:var, x}, b}), do: {:mul, b, {:pow, {:var, x}, {:sub, b, {:num, 1}}}}
+    defp deriv(x, {:ln, e}), do: {:mul, {:ln, e}, deriv(x, e)}
 end
 
 
@@ -52,6 +53,7 @@ defmodule Expression do
         | {:mul, expression, expression}
         | {:div, expression, expression}
         | {:pow, expression, expression}
+        | {:ln, expression}
 
     @doc """
     Attempt to evaluate an expression.
@@ -107,6 +109,9 @@ defmodule Expression do
     defp eval({:pow, {:num, 0}, {:num, 0}}), do: :illegal_expression
     defp eval({:pow, {:num, 0}, _}), do: {:num, 0}
     defp eval({:pow, _, {:num, 0}}), do: {:num, 1}
+    # Natural logarithm
+    defp eval({:ln, {:num, n}}), do: {:num, :math.log(n)}
+    # General
     defp eval({op, a, b}) do
         ea = eval(a)
         eb = eval(b)
@@ -128,6 +133,7 @@ defmodule Expression do
     defp expr_to_str({op, a, b}), do: expr_to_str(a) <> op_to_str(op) <> expr_to_str(b)
     defp expr_to_str({:num, n}), do: "#{n}"
     defp expr_to_str({:var, v}), do: "#{v}"
+    defp expr_to_str({op, e}), do: op_to_str(op) <> "(" <> expr_to_str(e) <> ")"
 
     defp op_to_str(:sum), do: " + "
     defp op_to_str(:sub), do: " - "
@@ -147,7 +153,7 @@ defmodule Parser do
     """
     @strings_ops    ["+", "-", "*", "/", "^"]
     # An operator is {operator, symbol, priority}
-    @ops_list       [{:sum, "+", 1}, {:sub, "-", 1}, {:mul, "*", 2}, {:div, "/", 2}, {:pow, "^", 3}]
+    @ops_list       [{:sum, "+", 1}, {:sub, "-", 1}, {:mul, "*", 2}, {:div, "/", 2}, {:pow, "^", 3}, {:ln, "ln", 4}]
     @regex_num      ~r{\d}
     @regex_var      ~r{[[:alpha:]]}
 
@@ -158,6 +164,7 @@ defmodule Parser do
         | :mul
         | :div
         | :pow
+        | :ln
 
     @doc """
     Attempt to parse a string.
