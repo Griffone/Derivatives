@@ -27,6 +27,7 @@ defmodule Derivative do
     defp deriv(x, {:mul, {:var, x}, b}), do: b
     defp deriv(x, {:mul, a, {:var, x}}), do: a
     defp deriv(x, {:mul, a, b}), do: {:sum, {:mul, deriv(x, a), b}, {:mul, a, deriv(x, b)}}
+    defp deriv(x, {:div, a, b}), do: {:div, {:sub, {:mul, deriv(x, a), b}, {:mul, a, deriv(x, b)}}, {:pow, b, {:num, 2}}}
     defp deriv(x, {:pow, {:var, x}, b}), do: {:mul, b, {:pow, {:var, x}, {:sub, b, {:num, 1}}}}
     defp deriv(x, {:ln, e}), do: {:mul, {:ln, e}, deriv(x, e)}
 end
@@ -60,15 +61,14 @@ defmodule Expression do
     Will perform any available functions on numbers or simplify some of the more basic simplification rules.
     """
     @spec evaluate(expression) :: expression | :illegal_expression
-    def evaluate({op, a, b}) do
-        expr = eval({op, a, b})
-        if expr != {op, a, b} do
-            evaluate(expr)
+    def evaluate(expr) do
+        result = eval(expr)
+        if result != expr do
+            evaluate(result)
         else
-            expr
+            result
         end
     end
-    def evaluate(expr), do: expr
 
     @spec eval(expression) :: expression | :illegal_expression
     # Addition
@@ -149,7 +149,7 @@ defmodule Parser do
 
     Used to parse expressions, used by Derivative module.
 
-    Known limitation: doesn't use proper parsing technique, so requires strict mathematical notation (2x is illegal for example)
+    Note: ignores brackets
     """
     @strings_ops    ["+", "-", "*", "/", "^"]
     # An operator is {operator, symbol, priority}
